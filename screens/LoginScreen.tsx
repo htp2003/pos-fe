@@ -6,13 +6,14 @@ import {
     Button,
     Alert,
     ActivityIndicator,
-    StyleSheet
+    StyleSheet,
 } from "react-native";
 import * as Location from "expo-location";
 import axios from "axios";
 import { NavigationProp } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../AuthContext';
+import MapView, { Marker } from 'react-native-maps'; // Expo đã tích hợp sẵn MapView
 
 interface LocationCoords {
     latitude: number;
@@ -31,9 +32,11 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
     const [locationError, setLocationError] = useState<string | null>(null);
     const [locationLoading, setLocationLoading] = useState(true);
     const [loading, setLoading] = useState(false);
+    const [mapRegion, setMapRegion] = useState<any>(null);
+
     let DEPLOYED_URL = "https://pos-backend-pvnx.onrender.com";
     let LOCAL_URL = "http://localhost:5000";
-    // Xử lý lấy vị trí khi component mount
+
     // Tách riêng hàm getLocation ra để tái sử dụng
     const getLocation = async () => {
         try {
@@ -58,10 +61,21 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
 
             console.log("📍 Vị trí đã lấy được:", loc.coords);
 
-            setLocation({
+            const currentLocation = {
                 latitude: loc.coords.latitude,
                 longitude: loc.coords.longitude
+            };
+
+            setLocation(currentLocation);
+
+            // Cập nhật region cho bản đồ
+            setMapRegion({
+                latitude: currentLocation.latitude,
+                longitude: currentLocation.longitude,
+                latitudeDelta: 0.005, // Mức độ zoom, giá trị nhỏ hơn = zoom gần hơn
+                longitudeDelta: 0.005,
             });
+
             setLocationLoading(false);
 
         } catch (error) {
@@ -112,11 +126,40 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
         }
     };
 
-
-
     return (
         <View style={styles.container}>
             <Text style={styles.title}>Đăng nhập</Text>
+
+            {/* Hiển thị bản đồ */}
+            <View style={styles.mapContainer}>
+                {mapRegion ? (
+                    <MapView
+                        style={styles.map}
+                        region={mapRegion}
+                        showsUserLocation={true}
+                        showsMyLocationButton={true}
+                    >
+                        <Marker
+                            coordinate={{
+                                latitude: mapRegion.latitude,
+                                longitude: mapRegion.longitude
+                            }}
+                            title="Vị trí của bạn"
+                            description="Bạn đang ở đây"
+                        />
+                    </MapView>
+                ) : locationLoading ? (
+                    <View style={styles.mapLoading}>
+                        <ActivityIndicator size="large" color="#0000ff" />
+                        <Text>Đang tải bản đồ...</Text>
+                    </View>
+                ) : (
+                    <View style={styles.mapError}>
+                        <Text style={styles.errorText}>Không thể tải bản đồ</Text>
+                        <Button title="Thử lại" onPress={handleRetryLocation} />
+                    </View>
+                )}
+            </View>
 
             <TextInput
                 placeholder="Email"
@@ -150,10 +193,15 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
                 </View>
             )}
 
-            {location && (
-                <Text style={styles.locationText}>
-                    ✅ Đã lấy được vị trí
-                </Text>
+            {location && !locationLoading && !locationError && (
+                <View style={styles.locationInfo}>
+                    <Text style={styles.locationText}>
+                        ✅ Đã lấy được vị trí
+                    </Text>
+                    <Text style={styles.locationCoords}>
+                        Tọa độ: {location.latitude.toFixed(6)}, {location.longitude.toFixed(6)}
+                    </Text>
+                </View>
             )}
 
             {/* Nút đăng nhập */}
@@ -183,6 +231,33 @@ const styles = StyleSheet.create({
         marginBottom: 20,
         textAlign: 'center'
     },
+    mapContainer: {
+        width: '100%',
+        height: 200,
+        borderRadius: 10,
+        overflow: 'hidden',
+        marginBottom: 20,
+        borderWidth: 1,
+        borderColor: '#ddd'
+    },
+    map: {
+        width: '100%',
+        height: '100%'
+    },
+    mapLoading: {
+        width: '100%',
+        height: '100%',
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: '#f5f5f5'
+    },
+    mapError: {
+        width: '100%',
+        height: '100%',
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: '#f5f5f5'
+    },
     input: {
         borderBottomWidth: 1,
         marginBottom: 15,
@@ -196,10 +271,19 @@ const styles = StyleSheet.create({
         marginBottom: 15,
         gap: 8
     },
+    locationInfo: {
+        marginBottom: 15,
+        alignItems: 'center'
+    },
     locationText: {
         textAlign: 'center',
         color: '#666',
-        marginBottom: 15
+        marginBottom: 5
+    },
+    locationCoords: {
+        textAlign: 'center',
+        color: '#888',
+        fontSize: 12
     },
     errorText: {
         color: 'red',
